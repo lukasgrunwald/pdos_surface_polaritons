@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+py-modules = ["pdos_surface_polaritons"]
+
+[tool.setuptools]
+packages = ["pdos_surf"]
+
+[project]
+name = "pdos_surface_polaritons"
+version = "0.0.1"
+dependencies = ["numpy", "matplotlib"]

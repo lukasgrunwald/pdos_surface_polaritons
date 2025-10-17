@@ -1,0 +1,12 @@
+# General files and data (.csv is synced)
+.vscode
+*/__pycache__/*
+**.DS_Store
+**.egg-info
+**__pycache__
+
+# Temporaray folders and outputs
+temp/*
+temp/
+outputs/
+Manifest.toml
