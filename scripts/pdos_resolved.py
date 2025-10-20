@@ -117,9 +117,7 @@ def plot_pdos_EvaTE():
     epsInf = 2.
     L = .1
     eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
-
     zArr = np.linspace(-L / 2., L / 2., 500)
-
     dos = PdosEvaTE.pdos(zArr, L, omega, wLO, wTO, epsInf)
 
     fig, ax = plt.subplots(figsize = (8 * CM, 5 * CM), dpi = 300)

@@ -6,31 +6,75 @@ from typing import Tuple
 
 import numpy as np
 import scipy.constants as consts
-from time import perf_counter
 
 from . import momentum_relations as momentum_relations
 from . import allowed_kz as allowed_kz
 
 class AbstractModeFunction(ABC):
+    """Template for mode resolved pdos implementation"""
     @staticmethod
     @abstractmethod
-    def norm_sqrt(*args, **kwargs):
+    def norm_sqrt(kArr, L, omega, wLO, wTO, epsInf):
+        pass
+
+    # ———————————————————————————————— Pdos sum methods ———————————————————————————————— #
+    @staticmethod
+    @abstractmethod
+    def pdos_sum_pos(zArr, kArr, kzArrDel, L, omega, wLO, wTO, epsInf):
         pass
 
     @staticmethod
     @abstractmethod
-    def pdos_sum_pos(*args, **kwargs):
+    def pdos_sum_neg(zArr, kArr, kzArrDel, L, omega, wLO, wTO, epsInf):
         pass
 
     @staticmethod
+    def pdos_sum_para_pos(*args, **kwargs):
+        raise NotImplementedError("Method pdos_sum_para_pos not implemented!")
+
+    @staticmethod
+    def pdos_sum_para_neg(*args, **kwargs):
+        raise NotImplementedError("Method pdos_sum_perp_neg not implemented!")
+
+    @staticmethod
+    def pdos_sum_perp_pos(*args, **kwargs):
+        raise NotImplementedError("Method pdos_sum_perp_pos not implemented!")
+
+    @staticmethod
+    def pdos_sum_perp_neg(*args, **kwargs):
+        raise NotImplementedError("Method pdos_sum_perp_neg not implemented!")
+
+    # —————————————————————————————— Full & resolved Pdos —————————————————————————————— #
+    @staticmethod
     @abstractmethod
-    def pdos_sum_neg(*args, **kwargs):
+    def pdos(zArr, L, omega, wLO, wTO, epsInf) -> np.ndarray:
         pass
 
     @staticmethod
-    @abstractmethod
-    def pdos(*args, **kwargs) -> np.ndarray:
+    def pdos_para_perp(zArr, L, omega, wLO, wTO, epsInf) -> Tuple[np.ndarray, np.ndarray]:
+        raise NotImplementedError("Method pdos_para_perp not implemented!")
         pass
+
+    # ————————————————————————————— Frequency space methods ———————————————————————————— #
+    @staticmethod
+    @abstractmethod
+    def pdos_non_zero_flag(omega, wLO, wTO, epsInf) -> bool:
+        """Implementation for which the PDOS is non zero"""
+        pass
+
+    @classmethod
+    def pdos_w(cls, omega, zArr, L, wLO, wTO, epsInf) -> np.ndarray:
+        if cls.pdos_non_zero_flag(omega, wLO, wTO, epsInf):
+            return cls.pdos(zArr, L, omega, wLO, wTO, epsInf)
+        else:
+            return np.zeros(len(zArr))
+
+    @classmethod
+    def pdos_para_perp_w(cls, omega, zArr, L, wLO, wTO, epsInf) -> Tuple[np.ndarray, np.ndarray]:
+        if cls.pdos_non_zero_flag(omega, wLO, wTO, epsInf):
+            return cls.pdos_para_perp(zArr, L, omega, wLO, wTO, epsInf)
+        else:
+            return (np.zeros(len(zArr)), np.zeros(len(zArr)))
 
 # —————————————————————————————————— Propagating modes ————————————————————————————————— #
 
@@ -38,6 +82,11 @@ class PdosTE(AbstractModeFunction):
     """
     Propagating TE modes. These only have parallel components
     """
+    @staticmethod
+    def pdos_non_zero_flag(omega, wLO, wTO, epsInf) -> bool:
+        epsilon = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
+        return epsilon > 0
+
     @staticmethod
     def norm_sqrt(kArr, L, omega, wLO, wTO, epsInf):
         kDVal = momentum_relations.kDFromK(kArr, omega, wLO, wTO, epsInf)
@@ -83,17 +132,22 @@ class PdosTM(AbstractModeFunction):
     Propagating TM modes. These have both parallel and perpendicular components
     """
     @staticmethod
-    def norm_sqrt(kVal, L, omega, wLO, wTO, epsInf):
+    def pdos_non_zero_flag(omega, wLO, wTO, epsInf) -> bool:
+        epsilon = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
+        return epsilon > 0
+
+    @staticmethod
+    def norm_sqrt(kArr, L, omega, wLO, wTO, epsInf):
         eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
-        kDVal = momentum_relations.kDFromK(kVal, omega, wLO, wTO, epsInf)
+        kDVal = momentum_relations.kDFromK(kArr, omega, wLO, wTO, epsInf)
         normPrefac = momentum_relations.normFac(omega, wLO, wTO, epsInf)
 
-        brack11 = omega**2 / (consts.c**2 * kVal**2)
-        brack12 = (omega**2 / (consts.c**2 * kVal**2) - 2) * np.sin(kVal * L) / (kVal * L)
+        brack11 = omega**2 / (consts.c**2 * kArr**2)
+        brack12 = (omega**2 / (consts.c**2 * kArr**2) - 2) * np.sin(kArr * L) / (kArr * L)
         term1 = (brack11 + brack12) * np.sin(kDVal * L / 2.)**2
         brack21 = eps * omega**2 / (consts.c**2 * kDVal**2)
         brack22 = (eps * omega**2 / (consts.c**2 * kDVal**2) - 2) * np.sin(kDVal * L) / (kDVal * L)
-        term2 = normPrefac * (brack21 + brack22) * np.sin(kVal * L / 2.)**2
+        term2 = normPrefac * (brack21 + brack22) * np.sin(kArr * L / 2.)**2
 
         return L / 4. * (term1 + term2)
 
@@ -137,12 +191,12 @@ class PdosTM(AbstractModeFunction):
         return np.sum(1. / NSqr[None, :] * func**2 * diffFac, axis = 1)
 
     @staticmethod
-    def _pdos(zArr, L, omega, wLO, wTO, epsInf):
+    def _pdos(zArr, L, omega, wLO, wTO, epsInf) -> Tuple[np.ndarray, np.ndarray]:
         kArr = allowed_kz.computeAllowedKs(L, omega, wLO, wTO, epsInf, "TM")
         kzArrDel = allowed_kz.findKsDerivativeW(kArr, L, omega, wLO, wTO, epsInf, "TM")
 
         if(len(kArr) == 0):
-            return 0
+            return (np.zeros(len(zArr)), np.zeros(len(zArr)))
 
         indNeg = np.where(zArr < 0)
         indPos = np.where(zArr >= 0)
@@ -159,7 +213,7 @@ class PdosTM(AbstractModeFunction):
         return (dosPara, dosPerp)
 
     @staticmethod
-    def pdos(zArr, L, omega, wLO, wTO, epsInf):
+    def pdos(zArr, L, omega, wLO, wTO, epsInf) -> np.ndarray:
         tpl = PdosTM._pdos(zArr, L, omega, wLO, wTO, epsInf)
         return sum(tpl)
 
@@ -171,14 +225,19 @@ class PdosTM(AbstractModeFunction):
 
 class PdosEvaTE(AbstractModeFunction):
     @staticmethod
-    def norm_sqrt(kVal, L, omega, wLO, wTO, epsInf):
-        kDVal = momentum_relations.kDFromKEva(kVal, omega, wLO, wTO, epsInf)
+    def pdos_non_zero_flag(omega, wLO, wTO, epsInf) -> bool:
+        epsilon = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
+        return epsilon > 1
+
+    @staticmethod
+    def norm_sqrt(kArr, L, omega, wLO, wTO, epsInf):
+        kDVal = momentum_relations.kDFromKEva(kArr, omega, wLO, wTO, epsInf)
         normPrefac = momentum_relations.normFac(omega, wLO, wTO, epsInf)
 
-        brack1 = (1 - np.exp(- 2. * kVal * L)) / (2. * kVal * L) - np.exp(- kVal * L)
+        brack1 = (1 - np.exp(- 2. * kArr * L)) / (2. * kArr * L) - np.exp(- kArr * L)
         term1 = brack1 * np.sin(kDVal * L / 2) ** 2
         brack2 = 1 - np.sin(kDVal * L) / (kDVal * L)
-        term2 = normPrefac * brack2 * 0.25 * (1 + np.exp(-2 * kVal * L) - 2. * np.exp(- kVal * L))
+        term2 = normPrefac * brack2 * 0.25 * (1 + np.exp(-2 * kArr * L) - 2. * np.exp(- kArr * L))
         return L / 4 * (term1 + term2)
 
     @staticmethod
@@ -217,17 +276,22 @@ class PdosEvaTE(AbstractModeFunction):
 
 class PdosEvaTM(AbstractModeFunction):
     @staticmethod
-    def norm_sqrt(kVal, L, omega, wLO, wTO, epsInf):
-        kDVal = momentum_relations.kDFromKEva(kVal, omega, wLO, wTO, epsInf)
+    def pdos_non_zero_flag(omega, wLO, wTO, epsInf) -> bool:
+        epsilon = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
+        return epsilon > 1
+
+    @staticmethod
+    def norm_sqrt(kArr, L, omega, wLO, wTO, epsInf):
+        kDVal = momentum_relations.kDFromKEva(kArr, omega, wLO, wTO, epsInf)
         normPrefac = momentum_relations.normFac(omega, wLO, wTO, epsInf)
         eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
 
-        brack11 = np.exp(- kVal * L) * omega**2 / (consts.c**2 * kVal**2)
-        brack12 = (omega**2 / (consts.c**2 * kVal**2) + 2) * (1 - np.exp(- 2 * kVal * L)) / (2 * kVal * L)
+        brack11 = np.exp(- kArr * L) * omega**2 / (consts.c**2 * kArr**2)
+        brack12 = (omega**2 / (consts.c**2 * kArr**2) + 2) * (1 - np.exp(- 2 * kArr * L)) / (2 * kArr * L)
         term1 = (brack11 + brack12) * np.sin(kDVal * L / 2.)**2
         brack21 = eps * omega**2 / (consts.c**2 * kDVal**2)
         brack22 = (eps * omega**2 / (consts.c**2 * kDVal**2) - 2) * np.sin(kDVal * L) / (kDVal * L)
-        term2 = normPrefac * (brack21 + brack22) * 0.25 * (1 + np.exp(-2. * kVal * L) - 2. * np.exp(-kVal * L))
+        term2 = normPrefac * (brack21 + brack22) * 0.25 * (1 + np.exp(-2. * kArr * L) - 2. * np.exp(-kArr * L))
 
         return L / 4. * (term1 + term2)
 
@@ -273,7 +337,7 @@ class PdosEvaTM(AbstractModeFunction):
         return np.sum(1. / NSqr[None, :] * func**2 * diffFac, axis = 1)
 
     @staticmethod
-    def _pdos(zArr, L, omega, wLO, wTO, epsInf):
+    def _pdos(zArr, L, omega, wLO, wTO, epsInf) -> Tuple[np.ndarray, np.ndarray]:
         kArr = allowed_kz.computeAllowedKs(L, omega, wLO, wTO, epsInf, "TMEva")
         kzArrDel = allowed_kz.findKsDerivativeW(kArr, L, omega, wLO, wTO, epsInf, "TMEva")
 
@@ -292,7 +356,7 @@ class PdosEvaTM(AbstractModeFunction):
 
 
     @staticmethod
-    def pdos(zArr, L, omega, wLO, wTO, epsInf):
+    def pdos(zArr, L, omega, wLO, wTO, epsInf) -> np.ndarray:
         tpl = PdosEvaTM._pdos(zArr, L, omega, wLO, wTO, epsInf)
         return sum(tpl)
 
@@ -304,6 +368,11 @@ class PdosEvaTM(AbstractModeFunction):
 
 class PdosResTE(AbstractModeFunction):
     """Pdos of resonant TE modes existing outside the material"""
+    @staticmethod
+    def pdos_non_zero_flag(omega, wLO, wTO, epsInf) -> bool:
+        epsilon = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
+        return epsilon < 1.0
+
     @staticmethod
     def norm_sqrt(kArr, L, omega, wLO, wTO, epsInf):
         kDArr = momentum_relations.kDFromKRes(kArr, omega, wLO, wTO, epsInf)
@@ -353,17 +422,22 @@ class PdosResTE(AbstractModeFunction):
 class PdosResTM(AbstractModeFunction):
     """Pdos of resonant TM modes existing outside the material"""
     @staticmethod
-    def norm_sqrt(kVal, L, omega, wLO, wTO, epsInf):
-        kDArr = momentum_relations.kDFromKRes(kVal, omega, wLO, wTO, epsInf)
+    def pdos_non_zero_flag(omega, wLO, wTO, epsInf) -> bool:
+        epsilon = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
+        return epsilon < 1.0
+
+    @staticmethod
+    def norm_sqrt(kArr, L, omega, wLO, wTO, epsInf):
+        kDArr = momentum_relations.kDFromKRes(kArr, omega, wLO, wTO, epsInf)
         normPrefac = momentum_relations.normFac(omega, wLO, wTO, epsInf)
         eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
 
-        brack11 =  omega**2 / (consts.c**2 * kVal**2)
-        brack12 = (omega**2 / (consts.c**2 * kVal**2) - 2) * np.sin(kVal * L) / (kVal * L)
+        brack11 =  omega**2 / (consts.c**2 * kArr**2)
+        brack12 = (omega**2 / (consts.c**2 * kArr**2) - 2) * np.sin(kArr * L) / (kArr * L)
         term1 = (brack11 + brack12) * 0.25 * (1 - np.exp(- 2. * kDArr * L) - 2 * np.exp(- kDArr * L))
         brack21 = np.exp(- kDArr * L) * eps * omega**2 / (consts.c**2 * kDArr**2)
         brack22 = (eps * omega**2 / (consts.c**2 * kDArr**2) + 2) * (1 - np.exp(-kDArr * L)) / (2 * kDArr * L)
-        term2 = normPrefac * (brack21 + brack22) * np.sin(kVal * L)**2
+        term2 = normPrefac * (brack21 + brack22) * np.sin(kArr * L)**2
 
         return L / 4. * (term1 + term2)
 
@@ -391,7 +465,8 @@ class PdosResTM(AbstractModeFunction):
         NSqr = PdosResTM.norm_sqrt(kArr, L, omega, wLO, wTO, epsInf)
         kDArr = momentum_relations.kDFromKRes(kArr, omega, wLO, wTO, epsInf)
 
-        func = np.sqrt(omega**2 / (consts.c**2 * kArr[None, :]**2) - 1) * np.cos(kArr[None, :] * (L / 2. - zArr[:, None])) * 0.5 * (1 - np.exp(-kDArr[None, :] * L))
+        func = np.sqrt(omega**2 / (consts.c**2 * kArr[None, :]**2) - 1) *\
+              np.cos(kArr[None, :] * (L / 2. - zArr[:, None])) * 0.5 * (1 - np.exp(-kDArr[None, :] * L))
         diffFac = (1. - consts.c ** 2 * kArr[None, :] / omega * kzArrDel[None, :])
         return np.sum(1. / NSqr[None, :] * func ** 2 * diffFac, axis=1)
 
@@ -401,7 +476,8 @@ class PdosResTM(AbstractModeFunction):
         kDArr = momentum_relations.kDFromKRes(kArr, omega, wLO, wTO, epsInf)
         eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
 
-        func = np.sqrt(eps * omega**2 / (consts.c**2 * kDArr[None, :]**2) + 1) * 0.5 * ( np.exp(kDArr[None, :] * zArr[:, None]) +  np.exp(-kDArr[None, :] * (zArr[:, None] + L))) * np.sin(kArr[None, :] * L / 2.)
+        func = np.sqrt(eps * omega**2 / (consts.c**2 * kDArr[None, :]**2) + 1) *\
+              0.5 * ( np.exp(kDArr[None, :] * zArr[:, None]) +  np.exp(-kDArr[None, :] * (zArr[:, None] + L))) * np.sin(kArr[None, :] * L / 2.)
         diffFac = (1. - consts.c ** 2 * kArr[None, :] / omega * kzArrDel[None, :])
         return np.sum(1. / NSqr[None, :] * func ** 2 * diffFac, axis=1)
 
@@ -411,7 +487,7 @@ class PdosResTM(AbstractModeFunction):
         kzArrDel = allowed_kz.findKsDerivativeW(kArr, L, omega, wLO, wTO, epsInf, "TMRes")
 
         if(len(kArr) == 0):
-            return 0
+            return (np.zeros(len(zArr)), np.zeros(len(zArr)))
 
         indNeg = np.where(zArr < 0)
         indPos = np.where(zArr >= 0)
@@ -428,7 +504,7 @@ class PdosResTM(AbstractModeFunction):
         return (dosPara, dosPerp)
 
     @staticmethod
-    def pdos(zArr, L, omega, wLO, wTO, epsInf):
+    def pdos(zArr, L, omega, wLO, wTO, epsInf) -> np.ndarray:
         tpl = PdosResTM._pdos(zArr, L, omega, wLO, wTO, epsInf)
         return sum(tpl)
 
@@ -441,65 +517,70 @@ class PdosResTM(AbstractModeFunction):
 class PdosSurf(AbstractModeFunction):
     """Double evanescent waves localized at the interface"""
     @staticmethod
-    def norm_sqrt(kVal, L, omega, wLO, wTO, epsInf):
-        kDArr = momentum_relations.kDFromKSurf(kVal, omega, wLO, wTO, epsInf)
+    def pdos_non_zero_flag(omega, wLO, wTO, epsInf) -> bool:
+        wInf = np.sqrt(epsInf * wLO**2 + wTO**2) / np.sqrt(epsInf + 1)
+        return (omega < wInf) and (omega > wTO)
+
+    @staticmethod
+    def norm_sqrt(kArr, L, omega, wLO, wTO, epsInf):
+        kDArr = momentum_relations.kDFromKSurf(kArr, omega, wLO, wTO, epsInf)
         eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
         normPrefac = momentum_relations.normFac(omega, wLO, wTO, epsInf)
 
-        brack11 = np.exp(- kVal * L) * omega ** 2 / (consts.c ** 2 * kVal ** 2)
-        brack12 = (omega ** 2 / (consts.c ** 2 * kVal ** 2) + 2) * (1 - np.exp(- 2 * kVal * L)) / (2 * kVal * L)
+        brack11 = np.exp(- kArr * L) * omega ** 2 / (consts.c ** 2 * kArr ** 2)
+        brack12 = (omega ** 2 / (consts.c ** 2 * kArr ** 2) + 2) * (1 - np.exp(- 2 * kArr * L)) / (2 * kArr * L)
         term1 = (brack11 + brack12) * 0.25 * (1 + np.exp(-2. * kDArr * L) - 2. * np.exp(-kDArr * L))
 
         brack21 = np.exp(- kDArr * L) * eps * omega ** 2 / (consts.c ** 2 * kDArr ** 2)
         brack22 = (eps * omega ** 2 / (consts.c ** 2 * kDArr ** 2) + 2) * (1 - np.exp(- 2 * kDArr * L)) / (2 * kDArr * L)
-        term2 = normPrefac * (brack21 + brack22) * 0.25 * (1 + np.exp(-2. * kVal * L) - 2. * np.exp(-kVal * L))
+        term2 = normPrefac * (brack21 + brack22) * 0.25 * (1 + np.exp(-2. * kArr * L) - 2. * np.exp(-kArr * L))
 
         return L / 4. * (term1 + term2)
 
     @staticmethod
-    def pdos_sum_para_pos(zArr, kVal, L, omega, wLO, wTO, epsInf):
-        NSqr = PdosSurf.norm_sqrt(kVal, L, omega, wLO, wTO, epsInf)
-        kDVal = momentum_relations.kDFromKSurf(kVal, omega, wLO, wTO, epsInf)
+    def pdos_sum_para_pos(zArr, kArr, L, omega, wLO, wTO, epsInf):
+        NSqr = PdosSurf.norm_sqrt(kArr, L, omega, wLO, wTO, epsInf)
+        kDVal = momentum_relations.kDFromKSurf(kArr, omega, wLO, wTO, epsInf)
         kzDel = allowed_kz.findKsDerivativeWSurf(L, omega, wLO, wTO, epsInf)
 
-        func = 0.25 * (np.exp(- kVal * zArr) - np.exp(kVal * (zArr - L))) * (1 - np.exp(-kDVal * L))
-        diffFac = (1. + consts.c ** 2 * kVal / omega * kzDel)
+        func = 0.25 * (np.exp(- kArr * zArr) - np.exp(kArr * (zArr - L))) * (1 - np.exp(-kDVal * L))
+        diffFac = (1. + consts.c ** 2 * kArr / omega * kzDel)
         return 1. / NSqr * func ** 2 * diffFac
 
     @staticmethod
-    def pdos_sum_para_neg(zArr, kVal, L, omega, wLO, wTO, epsInf):
-        NSqr = PdosSurf.norm_sqrt(kVal, L, omega, wLO, wTO, epsInf)
-        kDVal = momentum_relations.kDFromKSurf(kVal, omega, wLO, wTO, epsInf)
+    def pdos_sum_para_neg(zArr, kArr, L, omega, wLO, wTO, epsInf):
+        NSqr = PdosSurf.norm_sqrt(kArr, L, omega, wLO, wTO, epsInf)
+        kDVal = momentum_relations.kDFromKSurf(kArr, omega, wLO, wTO, epsInf)
         kzDel = allowed_kz.findKsDerivativeWSurf(L, omega, wLO, wTO, epsInf)
 
-        func = 0.25 * (np.exp(kDVal * zArr) - np.exp(- kDVal * (L + zArr))) * (1 - np.exp(-kVal * L))
-        diffFac = (1. + consts.c ** 2 * kVal / omega * kzDel)
+        func = 0.25 * (np.exp(kDVal * zArr) - np.exp(- kDVal * (L + zArr))) * (1 - np.exp(-kArr * L))
+        diffFac = (1. + consts.c ** 2 * kArr / omega * kzDel)
         return 1. / NSqr * func ** 2 * diffFac
 
     @staticmethod
-    def pdos_sum_perp_pos(zArr, kVal, L, omega, wLO, wTO, epsInf):
-        NSqr = PdosSurf.norm_sqrt(kVal, L, omega, wLO, wTO, epsInf)
-        kDVal = momentum_relations.kDFromKSurf(kVal, omega, wLO, wTO, epsInf)
+    def pdos_sum_perp_pos(zArr, kArr, L, omega, wLO, wTO, epsInf):
+        NSqr = PdosSurf.norm_sqrt(kArr, L, omega, wLO, wTO, epsInf)
+        kDVal = momentum_relations.kDFromKSurf(kArr, omega, wLO, wTO, epsInf)
         kzDel = allowed_kz.findKsDerivativeWSurf(L, omega, wLO, wTO, epsInf)
 
-        func = 0.25 * np.sqrt(omega ** 2 / (consts.c ** 2 * kVal ** 2) + 1) * (np.exp(- kVal * zArr) + np.exp(kVal * (zArr - L))) * (1 - np.exp(-kDVal * L))
-        diffFac = (1. + consts.c ** 2 * kVal / omega * kzDel)
+        func = 0.25 * np.sqrt(omega ** 2 / (consts.c ** 2 * kArr ** 2) + 1) * (np.exp(- kArr * zArr) + np.exp(kArr * (zArr - L))) * (1 - np.exp(-kDVal * L))
+        diffFac = (1. + consts.c ** 2 * kArr / omega * kzDel)
         return 1. / NSqr * func ** 2 * diffFac
 
     @staticmethod
-    def pdos_sum_perp_neg(zArr, kVal, L, omega, wLO, wTO, epsInf):
+    def pdos_sum_perp_neg(zArr, kArr, L, omega, wLO, wTO, epsInf):
         eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
-        NSqr = PdosSurf.norm_sqrt(kVal, L, omega, wLO, wTO, epsInf)
-        kDVal = momentum_relations.kDFromKSurf(kVal, omega, wLO, wTO, epsInf)
+        NSqr = PdosSurf.norm_sqrt(kArr, L, omega, wLO, wTO, epsInf)
+        kDVal = momentum_relations.kDFromKSurf(kArr, omega, wLO, wTO, epsInf)
         kzDel = allowed_kz.findKsDerivativeWSurf(L, omega, wLO, wTO, epsInf)
 
-        func = -0.25 * np.sqrt(eps * omega**2 / (consts.c**2 * kDVal**2) + 1) * ( np.exp(kDVal * zArr) +  np.exp(-kDVal * (L + zArr))) * (1 - np.exp(-kVal * L))
-        diffFac = (1. + consts.c ** 2 * kVal / omega * kzDel)
+        func = -0.25 * np.sqrt(eps * omega**2 / (consts.c**2 * kDVal**2) + 1) * ( np.exp(kDVal * zArr) +  np.exp(-kDVal * (L + zArr))) * (1 - np.exp(-kArr * L))
+        diffFac = (1. + consts.c ** 2 * kArr / omega * kzDel)
         return 1. / NSqr * func ** 2 * diffFac
 
     @staticmethod
-    def _pdos(zArr, L, omega, wLO, wTO, epsInf):
-        kVal = allowed_kz.findKsSurf(L, omega, wLO, wTO, epsInf)
+    def _pdos(zArr, L, omega, wLO, wTO, epsInf) -> Tuple[np.ndarray, np.ndarray]:
+        kArr = allowed_kz.findKsSurf(L, omega, wLO, wTO, epsInf)
         indNeg = np.where(zArr < 0)
         indPos = np.where(zArr >= 0)
         zPosArr = zArr[indPos]
@@ -510,17 +591,17 @@ class PdosSurf(AbstractModeFunction):
         zPosArr = zArr[indPos]
         zNegArr = zArr[indNeg]
 
-        dosPosPara = PdosSurf.pdos_sum_para_pos(zPosArr, kVal, L, omega, wLO, wTO, epsInf)
-        dosNegPara = PdosSurf.pdos_sum_para_neg(zNegArr, kVal, L, omega, wLO, wTO, epsInf)
-        dosPosPerp = PdosSurf.pdos_sum_perp_pos(zPosArr, kVal, L, omega, wLO, wTO, epsInf)
-        dosNegPerp = PdosSurf.pdos_sum_perp_neg(zNegArr, kVal, L, omega, wLO, wTO, epsInf)
+        dosPosPara = PdosSurf.pdos_sum_para_pos(zPosArr, kArr, L, omega, wLO, wTO, epsInf)
+        dosNegPara = PdosSurf.pdos_sum_para_neg(zNegArr, kArr, L, omega, wLO, wTO, epsInf)
+        dosPosPerp = PdosSurf.pdos_sum_perp_pos(zPosArr, kArr, L, omega, wLO, wTO, epsInf)
+        dosNegPerp = PdosSurf.pdos_sum_perp_neg(zNegArr, kArr, L, omega, wLO, wTO, epsInf)
         dosPara = np.pi * consts.c / (2. * omega) * np.append(dosNegPara, dosPosPara)
         dosPerp = np.pi * consts.c / (2. * omega) * np.append(dosNegPerp, dosPosPerp)
 
         return (dosPara, dosPerp)
 
     @staticmethod
-    def pdos(zArr, L, omega, wLO, wTO, epsInf):
+    def pdos(zArr, L, omega, wLO, wTO, epsInf) -> np.ndarray:
         tpl = PdosSurf._pdos(zArr, L, omega, wLO, wTO, epsInf)
         return sum(tpl)
 
@@ -528,14 +609,14 @@ class PdosSurf(AbstractModeFunction):
     def pdos_para_perp(zArr, L, omega, wLO, wTO, epsInf):
         return PdosSurf._pdos(zArr, L, omega, wLO, wTO, epsInf)
 
-class PdosSurfAnalytic(AbstractModeFunction):
+class PdosSurfAnalytic:
     """
     Analytic implementation of the surface modes.
     Without distinguishing components parallel and perpendicular to the surface!
     """
     @staticmethod
-    def norm_sqrt(kVal, L, omega, wLO, wTO, epsInf):
-        return PdosSurf.norm_sqrt(kVal, L, omega, wLO, wTO, epsInf)
+    def norm_sqrt(kArr, L, omega, wLO, wTO, epsInf):
+        return PdosSurf.norm_sqrt(kArr, L, omega, wLO, wTO, epsInf)
 
     @staticmethod
     def pdos_sum_pos(zArr, omega, wLO, wTO, epsInf):
@@ -595,5 +676,3 @@ class PdosSurfAnalytic(AbstractModeFunction):
         expFac = np.exp(- 2. * omega * zVal / (consts.c * np.sqrt(epsAbs - 1)))
         diffExtraFac = 1 + 1. / epsInf * omega**2 / (1 - 1. / epsAbs) * (wLO**2 - wTO**2) / (wLO**2 - omega**2)**2
         return fac1 * fac2 * expFac * diffExtraFac
-
-#! We should still implement the checks for when a given solution can exist!
