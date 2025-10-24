@@ -1,4 +1,6 @@
 import sys
+import os
+
 CM = 1/2.54
 
 def use_style(name):
@@ -31,3 +33,27 @@ def use_style(name):
 
     main_globals = sys.modules['__main__'].__dict__  # Get globals of the main script
     exec(code, main_globals)  # Execute in main script's scope
+
+
+def versionized_path(path, overwrite = False):
+    """
+    Checks if a FILE exists and appends '_vN' until a unique name is found.
+    """
+    if not os.path.exists(path) or overwrite:
+        return path
+
+    directory = os.path.dirname(path)
+    filename = os.path.basename(path)
+    base, ext = os.path.splitext(filename)
+
+    version = 2
+    for i in range(200): # Maximal file Number is 200
+        versioned_filename = f"{base}_v{version}{ext}"
+        new_full_path = os.path.join(directory, versioned_filename)
+
+        if not os.path.exists(new_full_path):
+            return new_full_path
+
+        version += 1
+
+    raise FileExistsError("Couldn't fine a unique file name for {path}")

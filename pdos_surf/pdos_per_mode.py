@@ -2,10 +2,12 @@
 
 """
 from abc import ABC, abstractmethod
+from functools import partial
 from typing import Tuple
 
 import numpy as np
 import scipy.constants as consts
+from multiprocessing import Pool
 
 from . import momentum_relations as momentum_relations
 from . import allowed_kz as allowed_kz
@@ -113,8 +115,8 @@ class PdosTE(AbstractModeFunction):
 
     @staticmethod
     def pdos(zArr, L, omega, wLO, wTO, epsInf):
-        kArr = allowed_kz.computeAllowedKs(L, omega, wLO, wTO, epsInf, "TE")
-        kzArrDel = allowed_kz.findKsDerivativeW(kArr, L, omega, wLO, wTO, epsInf, "TE")
+        kArr = allowed_kz.compute_allowed_kz(L, omega, wLO, wTO, epsInf, "TE")
+        kzArrDel = allowed_kz.compute_derivative_kz(kArr, L, omega, wLO, wTO, epsInf, "TE")
 
         indNeg = np.where(zArr < 0)
         indPos = np.where(zArr >= 0)
@@ -126,6 +128,13 @@ class PdosTE(AbstractModeFunction):
 
         dos = np.pi * consts.c / (2. * omega) * np.append(dosNeg, dosPos)
         return dos
+
+    @staticmethod
+    def pdos_para_perp(zArr, L, omega, wLO, wTO, epsInf):
+        #! TE modes don't have a perpendicular component! Implemented for unified interface
+        pdos_para = PdosTE.pdos(zArr, L, omega, wLO, wTO, epsInf)
+        pdos_perp = np.zeros_like(pdos_para)
+        return (pdos_para, pdos_perp)
 
 class PdosTM(AbstractModeFunction):
     """
@@ -192,8 +201,8 @@ class PdosTM(AbstractModeFunction):
 
     @staticmethod
     def _pdos(zArr, L, omega, wLO, wTO, epsInf) -> Tuple[np.ndarray, np.ndarray]:
-        kArr = allowed_kz.computeAllowedKs(L, omega, wLO, wTO, epsInf, "TM")
-        kzArrDel = allowed_kz.findKsDerivativeW(kArr, L, omega, wLO, wTO, epsInf, "TM")
+        kArr = allowed_kz.compute_allowed_kz(L, omega, wLO, wTO, epsInf, "TM")
+        kzArrDel = allowed_kz.compute_derivative_kz(kArr, L, omega, wLO, wTO, epsInf, "TM")
 
         if(len(kArr) == 0):
             return (np.zeros(len(zArr)), np.zeros(len(zArr)))
@@ -260,8 +269,8 @@ class PdosEvaTE(AbstractModeFunction):
 
     @staticmethod
     def pdos(zArr, L, omega, wLO, wTO, epsInf):
-        kArr = allowed_kz.computeAllowedKs(L, omega, wLO, wTO, epsInf, "TEEva")
-        kzArrDel = allowed_kz.findKsDerivativeW(kArr, L, omega, wLO, wTO, epsInf, "TEEva")
+        kArr = allowed_kz.compute_allowed_kz(L, omega, wLO, wTO, epsInf, "TEEva")
+        kzArrDel = allowed_kz.compute_derivative_kz(kArr, L, omega, wLO, wTO, epsInf, "TEEva")
 
         indNeg = np.where(zArr < 0)
         indPos = np.where(zArr >= 0)
@@ -273,6 +282,13 @@ class PdosEvaTE(AbstractModeFunction):
 
         dos = np.pi * consts.c / (2. * omega) * np.append(dosNeg, dosPos)
         return dos
+
+    @staticmethod
+    def pdos_para_perp(zArr, L, omega, wLO, wTO, epsInf):
+        #! TE modes don't have a perpendicular component! Implemented for unified interface
+        pdos_para = PdosEvaTE.pdos(zArr, L, omega, wLO, wTO, epsInf)
+        pdos_perp = np.zeros_like(pdos_para)
+        return (pdos_para, pdos_perp)
 
 class PdosEvaTM(AbstractModeFunction):
     @staticmethod
@@ -338,8 +354,8 @@ class PdosEvaTM(AbstractModeFunction):
 
     @staticmethod
     def _pdos(zArr, L, omega, wLO, wTO, epsInf) -> Tuple[np.ndarray, np.ndarray]:
-        kArr = allowed_kz.computeAllowedKs(L, omega, wLO, wTO, epsInf, "TMEva")
-        kzArrDel = allowed_kz.findKsDerivativeW(kArr, L, omega, wLO, wTO, epsInf, "TMEva")
+        kArr = allowed_kz.compute_allowed_kz(L, omega, wLO, wTO, epsInf, "TMEva")
+        kzArrDel = allowed_kz.compute_derivative_kz(kArr, L, omega, wLO, wTO, epsInf, "TMEva")
 
         indNeg = np.where(zArr < 0)
         indPos = np.where(zArr >= 0)
@@ -387,7 +403,7 @@ class PdosResTE(AbstractModeFunction):
     @staticmethod
     def pdos_sum_pos(zArr, kArr, kzArrDel, L, omega, wLO, wTO, epsInf):
         NSqr = PdosResTE.norm_sqrt(kArr, L, omega, wLO, wTO, epsInf)
-        #kzArrDel = findAllowedKsSPhP.findKsDerivativeW(kArr, L, omega, wLO, wTO, epsInf, "TERes")
+        #kzArrDel = findAllowedKsSPhP.compute_derivative_kz(kArr, L, omega, wLO, wTO, epsInf, "TERes")
         kDArr = momentum_relations.kDFromKRes(kArr, omega, wLO, wTO, epsInf)
         func = np.sin(kArr[None, :] * (L / 2. - zArr[:, None])) * 0.5 * (1 - np.exp(- kDArr[None, :] * L))
         diffFac = (1. - consts.c ** 2 * kArr[None, :] / omega * kzArrDel[None, :])
@@ -405,8 +421,8 @@ class PdosResTE(AbstractModeFunction):
 
     @staticmethod
     def pdos(zArr, L, omega, wLO, wTO, epsInf):
-        kArr = allowed_kz.computeAllowedKs(L, omega, wLO, wTO, epsInf, "TERes")
-        kzArrDel = allowed_kz.findKsDerivativeW(kArr, L, omega, wLO, wTO, epsInf, "TERes")
+        kArr = allowed_kz.compute_allowed_kz(L, omega, wLO, wTO, epsInf, "TERes")
+        kzArrDel = allowed_kz.compute_derivative_kz(kArr, L, omega, wLO, wTO, epsInf, "TERes")
 
         indNeg = np.where(zArr < 0)
         indPos = np.where(zArr >= 0)
@@ -418,6 +434,13 @@ class PdosResTE(AbstractModeFunction):
 
         dos = np.pi * consts.c / (2. * omega) * np.append(dosNeg, dosPos)
         return dos
+
+    @staticmethod
+    def pdos_para_perp(zArr, L, omega, wLO, wTO, epsInf):
+        #! TE modes don't have a perpendicular component! Implemented for unified interface
+        pdos_para = PdosResTE.pdos(zArr, L, omega, wLO, wTO, epsInf)
+        pdos_perp = np.zeros_like(pdos_para)
+        return (pdos_para, pdos_perp)
 
 class PdosResTM(AbstractModeFunction):
     """Pdos of resonant TM modes existing outside the material"""
@@ -483,8 +506,8 @@ class PdosResTM(AbstractModeFunction):
 
     @staticmethod
     def _pdos(zArr, L, omega, wLO, wTO, epsInf) -> Tuple[np.ndarray, np.ndarray]:
-        kArr = allowed_kz.computeAllowedKs(L, omega, wLO, wTO, epsInf, "TMRes")
-        kzArrDel = allowed_kz.findKsDerivativeW(kArr, L, omega, wLO, wTO, epsInf, "TMRes")
+        kArr = allowed_kz.compute_allowed_kz(L, omega, wLO, wTO, epsInf, "TMRes")
+        kzArrDel = allowed_kz.compute_derivative_kz(kArr, L, omega, wLO, wTO, epsInf, "TMRes")
 
         if(len(kArr) == 0):
             return (np.zeros(len(zArr)), np.zeros(len(zArr)))
@@ -563,7 +586,8 @@ class PdosSurf(AbstractModeFunction):
         kDVal = momentum_relations.kDFromKSurf(kArr, omega, wLO, wTO, epsInf)
         kzDel = allowed_kz.findKsDerivativeWSurf(L, omega, wLO, wTO, epsInf)
 
-        func = 0.25 * np.sqrt(omega ** 2 / (consts.c ** 2 * kArr ** 2) + 1) * (np.exp(- kArr * zArr) + np.exp(kArr * (zArr - L))) * (1 - np.exp(-kDVal * L))
+        func = 0.25 * np.sqrt(omega ** 2 / (consts.c ** 2 * kArr ** 2) + 1) *\
+              (np.exp(- kArr * zArr) + np.exp(kArr * (zArr - L))) * (1 - np.exp(-kDVal * L))
         diffFac = (1. + consts.c ** 2 * kArr / omega * kzDel)
         return 1. / NSqr * func ** 2 * diffFac
 
@@ -574,7 +598,8 @@ class PdosSurf(AbstractModeFunction):
         kDVal = momentum_relations.kDFromKSurf(kArr, omega, wLO, wTO, epsInf)
         kzDel = allowed_kz.findKsDerivativeWSurf(L, omega, wLO, wTO, epsInf)
 
-        func = -0.25 * np.sqrt(eps * omega**2 / (consts.c**2 * kDVal**2) + 1) * ( np.exp(kDVal * zArr) +  np.exp(-kDVal * (L + zArr))) * (1 - np.exp(-kArr * L))
+        func = -0.25 * np.sqrt(eps * omega**2 / (consts.c**2 * kDVal**2) + 1) *\
+              ( np.exp(kDVal * zArr) +  np.exp(-kDVal * (L + zArr))) * (1 - np.exp(-kArr * L))
         diffFac = (1. + consts.c ** 2 * kArr / omega * kzDel)
         return 1. / NSqr * func ** 2 * diffFac
 
@@ -676,3 +701,54 @@ class PdosSurfAnalytic:
         expFac = np.exp(- 2. * omega * zVal / (consts.c * np.sqrt(epsAbs - 1)))
         diffExtraFac = 1 + 1. / epsInf * omega**2 / (1 - 1. / epsAbs) * (wLO**2 - wTO**2) / (wLO**2 - omega**2)**2
         return fac1 * fac2 * expFac * diffExtraFac
+
+def pdos_para_perp_array(cls, wArr, zArr, L, wLO, wTO, epsInf, n_processes=None):
+    """
+    Calculate pdos for a given mode for given class cls, for frequency array.
+    Results are split into parallel and perpendicular component
+    """
+    worker = partial(cls.pdos_para_perp_w, zArr=zArr, L=L, wLO=wLO, wTO=wTO, epsInf=epsInf)
+    with Pool(processes=n_processes) as pool:
+        results = pool.map(worker, wArr)
+
+    pdos = np.empty((2, len(zArr), len(wArr)))
+    for i, (para, perp) in enumerate(results):
+        pdos[0, :, i] = para
+        pdos[1, :, i] = perp
+
+    return pdos
+
+def pdos_para_perp_multi(clsArr, omega, zArr, L, wLO, wTO, epsInf):
+    """
+    Compute PDOS for multiple modes at a single frequency. First entry must be the one we
+    iterate over.
+
+    Returns: (n_modes, 2, len(zArr))
+    """
+    n_modes = len(clsArr)
+    results = np.empty((n_modes, 2, len(zArr)))
+
+    for i, cls in enumerate(clsArr):
+        para, perp = cls.pdos_para_perp_w(omega, zArr, L, wLO, wTO, epsInf)
+        results[i, 0, :] = para
+        results[i, 1, :] = perp
+
+    return results
+
+def pdos_para_perp_array_multi(cls_arr, wArr, zArr, L, wLO, wTO, epsInf, n_processes=None):
+    """
+    Calculate pdos for multiple modes, for frequency array.
+    Results are split into parallel and perpendicular component.
+
+    Returns: (n_modes, 2, len(zArr), len(wArr))
+    """
+    args_list = [(cls_arr, omega, zArr, L, wLO, wTO, epsInf) for omega in wArr]
+
+    with Pool(processes=n_processes) as pool:
+        results = pool.starmap(pdos_para_perp_multi, args_list)
+
+    # transpose: (len(wArr), n_modes, 2, len(zArr)) -> (n_modes, 2, len(zArr), len(wArr))
+    all_results = np.array(results)
+    pdos_array = np.transpose(all_results, (1, 2, 3, 0))
+
+    return pdos_array

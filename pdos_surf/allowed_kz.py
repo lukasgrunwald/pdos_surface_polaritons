@@ -2,7 +2,7 @@ import numpy as np
 import scipy.constants as consts
 import scipy
 
-import pdos_surf.momentum_relations as epsFunc
+import pdos_surf.momentum_relations as momentum_relations
 
 # —————————————————————————————————————————————————————————————————————————————————————— #
 #                                     Root functions                                     #
@@ -10,76 +10,56 @@ import pdos_surf.momentum_relations as epsFunc
 
 # —————————————————————————————————————— TE-modes —————————————————————————————————————— #
 def rootFuncTE(k, L, omega, wLO, wTO, epsInf):
-    kD = epsFunc.kDFromK(k, omega, wLO, wTO, epsInf)
+    kD = momentum_relations.kDFromK(k, omega, wLO, wTO, epsInf)
     term1 = k * np.cos(k * L / 2.) * np.sin(kD * L / 2.)
     term2 = kD * np.cos(kD * L / 2.) * np.sin(k * L / 2.)
     return  term1 + term2
 
 def rootFuncTEEva(kD, L, omega, wLO, wTO, epsInf):
-    kVal = epsFunc.kDFromKEva(kD, omega, wLO, wTO, epsInf)
+    kVal = momentum_relations.kDFromKEva(kD, omega, wLO, wTO, epsInf)
     term1 = kVal * np.sin(kD * L / 2)
     term2 = kD * np.cos(kD * L / 2) * np.tanh(kVal * L / 2)
     return term1 + term2
 
 def rootFuncTERes(k, L, omega, wLO, wTO, epsInf):
-    kD = epsFunc.kDFromKRes(k, omega, wLO, wTO, epsInf)
+    kD = momentum_relations.kDFromKRes(k, omega, wLO, wTO, epsInf)
     term1 = k * np.cos(k * L / 2) * np.tanh(kD * L / 2)
     term2 = kD * np.sin(k * L / 2)
     return term1 + term2
 
 # —————————————————————————————————————— TM-modes —————————————————————————————————————— #
 def rootFuncTM(k, L, omega, wLO, wTO, epsInf):
-    kD = epsFunc.kDFromK(k, omega,wLO, wTO, epsInf)
-    eps = epsFunc.epsilon(omega, wLO, wTO, epsInf)
+    kD = momentum_relations.kDFromK(k, omega,wLO, wTO, epsInf)
+    eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
     term1 = eps * k / kD * np.sin(k * L / 2.) * np.cos(kD * L / 2.)
     term2 = np.cos(k * L / 2.) * np.sin(kD * L / 2)
     return term1 + term2
 
 def rootFuncTMEva(kD, L, omega, wLO, wTO, epsInf):
-    eps = epsFunc.epsilon(omega, wLO, wTO, epsInf)
-    kVal = epsFunc.kDFromKEva(kD, omega, wLO, wTO, epsInf)
+    eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
+    kVal = momentum_relations.kDFromKEva(kD, omega, wLO, wTO, epsInf)
     term1 = eps * kVal * np.tanh(kVal * L / 2) * np.cos(kD * L / 2)
     term2 = kD * np.sin(kD * L / 2)
     return term1 - term2
 
 def rootFuncTMRes(k, L, omega, wLO, wTO, epsInf):
-    kD = epsFunc.kDFromKRes(k, omega, wLO, wTO, epsInf)
-    eps = epsFunc.epsilon(omega, wLO, wTO, epsInf)
+    kD = momentum_relations.kDFromKRes(k, omega, wLO, wTO, epsInf)
+    eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
     term1 = eps * k / kD * np.sin(k * L / 2)
     term2 = np.cos(k * L / 2) * np.tanh(kD * L / 2)
     return term1 - term2
 
 # ——————————————————————————————————————— Surface —————————————————————————————————————— #
 def rootFuncSurf(k, L, omega, wLO, wTO, epsInf):
-    kD = epsFunc.kDFromKSurf(k, omega, wLO, wTO, epsInf)
-    eps = epsFunc.epsilon(omega, wLO, wTO, epsInf)
+    kD = momentum_relations.kDFromKSurf(k, omega, wLO, wTO, epsInf)
+    eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
     term1 = eps * k / kD * np.tanh(k * L / 2)
     term2 = np.tanh(kD * L / 2)
     return term1 + term2
 
-def allowedKSurf(L, omega, wLO, wTO, epsInf):
-    epsAbs = np.abs(epsFunc.epsilon(omega, wLO, wTO, epsInf))
-    root = scipy.optimize.root_scalar(rootFuncSurf, args=(L, omega, wLO, wTO, epsInf),
-                                          bracket=tuple([0., omega / consts.c * (10 + 10 / (epsAbs - 1))]))
-    return np.array([root.root])
-
-def findKsSurf(L, omega, wLO, wTO, epsInf):
-    kVals = allowedKSurf(L, omega, wLO, wTO, epsInf)
-    if (len(kVals) == 0):
-        return 0
-    else:
-        return kVals[0]
-
-def findKsDerivativeWSurf(L, omega, wLO, wTO, epsInf):
-    delOm = omega * 1e-8
-    rootPlus = allowedKSurf(L, omega + delOm, wLO, wTO, epsInf)[0]
-    rootMinus = allowedKSurf(L, omega - delOm, wLO, wTO, epsInf)[0]
-
-    return (rootPlus - rootMinus) / (2. * delOm)
-
 # ——————————————————————————————————————— General —————————————————————————————————————— #
 def getUpperBound(mode, omega, wLO, wTO, epsInf):
-    eps = epsFunc.epsilon(omega, wLO, wTO, epsInf)
+    eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
 
     upperBound = 0
     if (mode == "TE" or mode == "TM" or mode == "Surf"):
@@ -95,7 +75,7 @@ def getUpperBound(mode, omega, wLO, wTO, epsInf):
     return upperBound
 
 def getLowerBound(mode, omega, wLO, wTO, epsInf):
-    eps = epsFunc.epsilon(omega, wLO, wTO, epsInf)
+    eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
     lowerBound = 0
     if(eps >= 0 and eps <= 1):
         if (mode == "TE" or mode == "TM"):
@@ -126,7 +106,7 @@ def getRoots(L, omega, wLO, wTO, epsInf, mode):
     upperBound = getUpperBound(mode, omega, wLO, wTO, epsInf)
     lowerBound = getLowerBound(mode, omega, wLO, wTO, epsInf)
 
-    eps = epsFunc.epsilon(omega, wLO, wTO, epsInf)
+    eps = momentum_relations.epsilon(omega, wLO, wTO, epsInf)
     NCoarse = 100
     coarseDisvision = np.linspace(lowerBound, upperBound, NCoarse, endpoint=True)
     iteration = 0
@@ -171,7 +151,7 @@ def getRoots(L, omega, wLO, wTO, epsInf, mode):
 
 
     if (mode == "TEEva" or mode == "TMEva"):
-        roots = epsFunc.kDFromKEva(roots, omega, wLO, wTO, epsInf)
+        roots = momentum_relations.kDFromKEva(roots, omega, wLO, wTO, epsInf)
 
     if(mode == "TE" or mode == "TEEva" or mode == "TERes"):
         if(len(roots) != 0):
@@ -185,17 +165,41 @@ def getRoots(L, omega, wLO, wTO, epsInf, mode):
 
     return roots
 
-def computeAllowedKs(L, omega, wLO, wTO, epsInf, mode):
+def compute_allowed_kz(L, omega, wLO, wTO, epsInf, mode):
     roots = getRoots(L, omega, wLO, wTO, epsInf, mode)
     #createRootsFuncPlotWithLines(roots, L, omega, wLO, wTO, epsInf, mode, "Roots")
     #print("Number of roots found for {} mode = {}".format(mode, len(roots)))
     return roots
 
-def findKsDerivativeW(roots, L, omega, wLO, wTO, epsInf, mode):
+def compute_derivative_kz(roots, L, omega, wLO, wTO, epsInf, mode):
+    """Finite differencing to compute the derivative of kz. Could also do this with autodiff?"""
     delOm = omega * 1e-12
     rootsPlus = getRoots(L, omega + delOm, wLO, wTO, epsInf, mode)
     rootsPlus = rootsPlus[:len(roots)]
     return (rootsPlus - roots) / (delOm)
+
+# ————————————————————————————————— Surface root finder ———————————————————————————————— #
+#! Don't think these are actually used anywhere
+def allowedKSurf(L, omega, wLO, wTO, epsInf):
+    epsAbs = np.abs(momentum_relations.epsilon(omega, wLO, wTO, epsInf))
+    root = scipy.optimize.root_scalar(rootFuncSurf, args=(L, omega, wLO, wTO, epsInf),
+                                          bracket=tuple([0., omega / consts.c * (10 + 10 / (epsAbs - 1))]))
+    return np.array([root.root])
+
+def findKsSurf(L, omega, wLO, wTO, epsInf):
+    kVals = allowedKSurf(L, omega, wLO, wTO, epsInf)
+    if (len(kVals) == 0):
+        return 0
+    else:
+        return kVals[0]
+
+def findKsDerivativeWSurf(L, omega, wLO, wTO, epsInf):
+    delOm = omega * 1e-8
+    rootPlus = allowedKSurf(L, omega + delOm, wLO, wTO, epsInf)[0]
+    rootMinus = allowedKSurf(L, omega - delOm, wLO, wTO, epsInf)[0]
+
+    return (rootPlus - rootMinus) / (2. * delOm)
+
 
 def createRootsFuncPlotWithLines(lines, L, omega, wLO, wTO, epsInf, mode, nameAdd):
     rootFunc = rootFuncTE
