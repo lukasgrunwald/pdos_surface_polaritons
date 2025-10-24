@@ -5,6 +5,8 @@
 **.egg-info
 **__pycache__
 **.h5
+**.out
+**.err
 
 # Temporaray folders and outputs
 temp/*

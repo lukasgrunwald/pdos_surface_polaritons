@@ -26,9 +26,7 @@ def run_partition(n, N_partitions, apdx):
 
     # Generate partitioned data
     base_dir = partition_folder_name(wLO, wTO, apdx)
-
-    if not os.path.exists(base_dir):
-        os.mkdir(base_dir)
+    os.makedirs(base_dir, exist_ok=True)
 
     tstart = perf_counter()
     generate_bulk_pdos_partition(n, N_partitions,

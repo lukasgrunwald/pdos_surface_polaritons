@@ -1,12 +1,9 @@
 """
 Run file for generating bulk frequency resolved data
 """
-##
 import numpy as np
-import scipy.constants as consts
 from time import perf_counter
 
-import pdos_surf.momentum_relations as mr
 from pdos_surf.pdos_per_mode import *
 from pdos_surf.io_manager import *
 
@@ -22,8 +19,7 @@ def run_partition(n, N_partitions, wmax, Nw, wLO, wTO, apdx):
     wArr = create_freq_array(w_top=wmax * 1e12, Nw=Nw)
 
     base_dir = partition_folder_name(wLO, wTO, apdx)
-    if not os.path.exists(base_dir):
-        os.mkdir(base_dir)
+    os.makedirs(base_dir, exist_ok=True)
 
     tstart = perf_counter()
     generate_bulk_pdos_partition(n, N_partitions,
@@ -38,6 +34,7 @@ if __name__ == '__main__':
         print("Usage: python script.py <n> <N_partitions> <wmax> <Nw> <wLO> <wTO>")
         sys.exit(1)
 
+    print(sys.argv)
     n = int(sys.argv[1])
     N_partitions = int(sys.argv[2])
     wmax = float(sys.argv[3])  # In THz!
