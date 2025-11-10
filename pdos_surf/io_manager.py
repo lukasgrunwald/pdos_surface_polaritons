@@ -31,6 +31,7 @@ def safe_frequency_array(wArr: np.ndarray, wLO: float, wTO: float):
     else:
         return wArr
 
+
 def partition_freq_array(freq_array, n_subdivisions):
     array_length = len(freq_array)
     base_size = array_length // n_subdivisions
@@ -108,6 +109,7 @@ def generate_bulk_pdos(clsArr, wArr, zArr, L, wLO, wTO, epsInf,
 
 def _load_bulk_pdos(path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
     """Load PDOS calculation results from HDF5 file.
+    (n_modes, 2, len(zArr), len(wArr))
 
     Parameter dict contains: wLO, wTO, epsInf, L, mode_names
     """
