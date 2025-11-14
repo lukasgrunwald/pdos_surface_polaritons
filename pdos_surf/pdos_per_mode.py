@@ -541,7 +541,7 @@ class PdosSurf(AbstractModeFunction):
     """Double evanescent waves localized at the interface"""
     @staticmethod
     def pdos_non_zero_flag(omega, wLO, wTO, epsInf) -> bool:
-        wInf = np.sqrt(epsInf * wLO**2 + wTO**2) / np.sqrt(epsInf + 1)
+        wInf = momentum_relations.w_inf(wLO, wTO, epsInf)
         return (omega < wInf) and (omega > wTO)
 
     @staticmethod
@@ -645,6 +645,7 @@ class PdosSurfAnalytic:
 
     @staticmethod
     def pdos_sum_pos(zArr, omega, wLO, wTO, epsInf):
+        """pdos above the substrate surface"""
         epsAbs = np.abs(momentum_relations.epsilon(omega, wLO, wTO, epsInf))
         normPrefac = momentum_relations.normFac(omega, wLO, wTO, epsInf)
 
@@ -656,6 +657,7 @@ class PdosSurfAnalytic:
 
     @staticmethod
     def pdos_sum_neg(zArr, omega, wLO, wTO, epsInf):
+        """pdos below the substrate surface"""
         epsAbs = np.abs(momentum_relations.epsilon(omega, wLO, wTO, epsInf))
         normPrefac = momentum_relations.normFac(omega, wLO, wTO, epsInf)
 
@@ -688,7 +690,7 @@ class PdosSurfAnalytic:
         expFac = np.exp(- 2. * omegaArr[:, None] * zArr[None, :] / (consts.c * np.sqrt(epsAbs[:, None] - 1)))
         diffExtraFac = 1 + 1. / epsInf * omegaArr[:, None] ** 2 / (1 - 1. / epsAbs[:, None]) * (wLO ** 2 - wTO ** 2) / (
                 wLO ** 2 - omegaArr[:, None] ** 2) ** 2
-        return fac1 * fac2 * expFac * diffExtraFac
+        return (fac1 * fac2 * expFac * diffExtraFac).T
 
     @staticmethod
     def pdos_int(omega, zVal, wLO, wTO, epsInf):
@@ -707,9 +709,19 @@ def pdos_para_perp_array(cls, wArr, zArr, L, wLO, wTO, epsInf, n_processes=None)
     Calculate pdos for a given mode for given class cls, for frequency array.
     Results are split into parallel and perpendicular component
     """
-    worker = partial(cls.pdos_para_perp_w, zArr=zArr, L=L, wLO=wLO, wTO=wTO, epsInf=epsInf)
-    with Pool(processes=n_processes) as pool:
-        results = pool.map(worker, wArr)
+    if n_processes == 1:
+        # Single-process version
+        results = [cls.pdos_para_perp_w(w, zArr=zArr, L=L, wLO=wLO, wTO=wTO, epsInf=epsInf)
+                   for w in wArr]
+    else:
+        # Multi-process version with spawn-safe context
+        worker = partial(cls.pdos_para_perp_w, zArr=zArr, L=L, wLO=wLO, wTO=wTO, epsInf=epsInf)
+        with Pool(processes=n_processes) as pool:
+            results = pool.map(worker, wArr)
+
+    # worker = partial(cls.pdos_para_perp_w, zArr=zArr, L=L, wLO=wLO, wTO=wTO, epsInf=epsInf)
+    # with Pool(processes=n_processes) as pool:
+    #     results = pool.map(worker, wArr)
 
     pdos = np.empty((2, len(zArr), len(wArr)))
     for i, (para, perp) in enumerate(results):

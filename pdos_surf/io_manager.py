@@ -13,7 +13,7 @@ from .util import *
 def create_freq_array(*, w_top, Nw, w_bot=0.0, exclude_zero=True):
     wArr = np.linspace(w_bot, w_top, Nw)
 
-    if exclude_zero:
+    if exclude_zero and w_bot == 0:
         wArr = wArr[1:]
 
     return wArr
@@ -127,6 +127,9 @@ def _load_bulk_pdos(path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, Dict
 
 
 def load_bulk_pdos(wLO, wTO, base_dir='./data/', apdx=''):
+    """
+    returns  wArr, zArr, pdos [(n_modes, 2, len(zArr), len(wArr))], params
+    """
     filename = pdos_filename(wLO, wTO, apdx)
     path = os.path.join(base_dir, filename)
     return _load_bulk_pdos(path)
